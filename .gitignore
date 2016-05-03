@@ -1,7 +1,0 @@
-node_modules
-dist
-bower_components
-.tmp
-.publish/
-.DS_Store
-app/bower_components
