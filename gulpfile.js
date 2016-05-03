@@ -276,7 +276,6 @@ gulp.task('deploy-gh-pages', function() {
       silent: true,
       branch: 'gh-pages'
     }), $.ghPages({
-      branch: 'master'
     })));
 });
 
