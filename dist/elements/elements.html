@@ -14341,6 +14341,144 @@ CSS properties               | Action
   };
 
 </script>
+
+
+<dom-module id="iron-overlay-backdrop" assetpath="../bower_components/iron-overlay-behavior/">
+
+  <style>
+    :host {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: var(--iron-overlay-backdrop-background-color, #000);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      @apply(--iron-overlay-backdrop);
+    }
+
+    :host(.opened) {
+      opacity: var(--iron-overlay-backdrop-opacity, 0.6);
+      pointer-events: auto;
+      @apply(--iron-overlay-backdrop-opened);
+    }
+  </style>
+
+  <template>
+    <content></content>
+  </template>
+
+</dom-module>
+
+<script>
+(function() {
+'use strict';
+
+  Polymer({
+
+    is: 'iron-overlay-backdrop',
+
+    properties: {
+
+      /**
+       * Returns true if the backdrop is opened.
+       */
+      opened: {
+        reflectToAttribute: true,
+        type: Boolean,
+        value: false,
+        observer: '_openedChanged'
+      }
+
+    },
+
+    listeners: {
+      'transitionend': '_onTransitionend'
+    },
+
+    created: function() {
+      // Used to cancel previous requestAnimationFrame calls when opened changes.
+      this.__openedRaf = null;
+    },
+
+    attached: function() {
+      this.opened && this._openedChanged(this.opened);
+    },
+
+    /**
+     * Appends the backdrop to document body if needed.
+     */
+    prepare: function() {
+      if (this.opened && !this.parentNode) {
+        Polymer.dom(document.body).appendChild(this);
+      }
+    },
+
+    /**
+     * Shows the backdrop.
+     */
+    open: function() {
+      this.opened = true;
+    },
+
+    /**
+     * Hides the backdrop.
+     */
+    close: function() {
+      this.opened = false;
+    },
+
+    /**
+     * Removes the backdrop from document body if needed.
+     */
+    complete: function() {
+      if (!this.opened && this.parentNode === document.body) {
+        Polymer.dom(this.parentNode).removeChild(this);
+      }
+    },
+
+    _onTransitionend: function(event) {
+      if (event && event.target === this) {
+        this.complete();
+      }
+    },
+
+    _openedChanged: function() {
+      if (this.opened) {
+        // Auto-attach.
+        this.prepare();
+      } else {
+        // Animation might be disabled via the mixin or opacity custom property.
+        // If it is disabled in other ways, it's up to the user to call complete.
+        var cs = window.getComputedStyle(this);
+        if (cs.transitionDuration === '0s' || cs.opacity == 0) {
+          this.complete();
+        }
+      }
+
+      if (!this.isAttached) {
+        return;
+      }
+
+      // Always cancel previous requestAnimationFrame.
+      if (this.__openedRaf) {
+        window.cancelAnimationFrame(this.__openedRaf);
+        this.__openedRaf = null;
+      }
+      // Force relayout to ensure proper transitions.
+      this.scrollTop = this.scrollTop;
+      this.__openedRaf = window.requestAnimationFrame(function() {
+        this.__openedRaf = null;
+        this.toggleClass('opened', this.opened);
+      }.bind(this));
+    }
+  });
+
+})();
+
+</script>
 <script>
 
   /**
@@ -14554,7 +14692,13 @@ CSS properties               | Action
      * Updates the backdrop z-index.
      */
     trackBackdrop: function() {
-      this.backdropElement.style.zIndex = this.backdropZ();
+      var overlay = this._overlayWithBackdrop();
+      // Avoid creating the backdrop if there is no overlay with backdrop.
+      if (!overlay && !this._backdropElement) {
+        return;
+      }
+      this.backdropElement.style.zIndex = this._getZ(overlay) - 1;
+      this.backdropElement.opened = !!overlay;
     },
 
     /**
@@ -14723,131 +14867,7 @@ CSS properties               | Action
 
   Polymer.IronOverlayManager = new Polymer.IronOverlayManagerClass();
 </script>
-
-
-<dom-module id="iron-overlay-backdrop" assetpath="../bower_components/iron-overlay-behavior/">
-
-  <style>
-
-    :host {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: var(--iron-overlay-backdrop-background-color, #000);
-      opacity: 0;
-      transition: opacity 0.2s;
-      pointer-events: none;
-
-      @apply(--iron-overlay-backdrop);
-    }
-
-    :host([opened]) {
-      opacity: var(--iron-overlay-backdrop-opacity, 0.6);
-      pointer-events: auto;
-
-      @apply(--iron-overlay-backdrop-opened);
-    }
-
-  </style>
-
-  <template>
-    <content></content>
-  </template>
-
-</dom-module>
-
 <script>
-
-(function() {
-
-  Polymer({
-
-    is: 'iron-overlay-backdrop',
-
-    properties: {
-
-      /**
-       * Returns true if the backdrop is opened.
-       */
-      opened: {
-        readOnly: true,
-        reflectToAttribute: true,
-        type: Boolean,
-        value: false
-      },
-
-      _manager: {
-        type: Object,
-        value: Polymer.IronOverlayManager
-      }
-
-    },
-
-    listeners: {
-      'transitionend' : '_onTransitionend'
-    },
-
-    /**
-     * Appends the backdrop to document body and sets its `z-index` to be below the latest overlay.
-     */
-    prepare: function() {
-      if (!this.parentNode) {
-        Polymer.dom(document.body).appendChild(this);
-      }
-    },
-
-    /**
-     * Shows the backdrop if needed.
-     */
-    open: function() {
-      // only need to make the backdrop visible if this is called by the first overlay with a backdrop
-      if (this._manager.getBackdrops().length < 2) {
-        this._setOpened(true);
-      }
-    },
-
-    /**
-     * Hides the backdrop if needed.
-     */
-    close: function() {
-      // close only if no element with backdrop is left
-      if (this._manager.getBackdrops().length === 0) {
-        // Read style before setting opened.
-        var cs = getComputedStyle(this);
-        var noAnimation = (cs.transitionDuration === '0s' || cs.opacity == 0);
-        this._setOpened(false);
-        // In case of no animations, complete
-        if (noAnimation) {
-          this.complete();
-        }
-      }
-    },
-
-    /**
-     * Removes the backdrop from document body if needed.
-     */
-    complete: function() {
-      // only remove the backdrop if there are no more overlays with backdrops
-      if (this._manager.getBackdrops().length === 0 && this.parentNode) {
-        Polymer.dom(this.parentNode).removeChild(this);
-      }
-    },
-
-    _onTransitionend: function (event) {
-      if (event && event.target === this) {
-        this.complete();
-      }
-    }
-
-  });
-
-})();
-
-</script>
-<script>
-// IIFE to help scripts concatenation.
 (function() {
 'use strict';
 
@@ -15089,10 +15109,6 @@ context. You should place this element as a child of `<body>` whenever possible.
       Polymer.dom(this).unobserveNodes(this._observer);
       this._observer = null;
       this.opened = false;
-      if (this.withBackdrop) {
-        // Allow user interactions right away.
-        this.backdropElement.close();
-      }
     },
 
     /**
@@ -15169,9 +15185,6 @@ context. You should place this element as a child of `<body>` whenever possible.
       this.__isAnimating = true;
 
       if (this.opened) {
-        if (this.withBackdrop) {
-          this.backdropElement.prepare();
-        }
         // requestAnimationFrame for non-blocking rendering
         this.__openChangedAsync = window.requestAnimationFrame(function() {
           this.__openChangedAsync = null;
@@ -15199,15 +15212,6 @@ context. You should place this element as a child of `<body>` whenever possible.
       }
       if (this.opened) {
         this._manager.trackBackdrop();
-        if (this.withBackdrop) {
-          this.backdropElement.prepare();
-          // Give time to be added to document.
-          this.async(function(){
-            this.backdropElement.open();
-          }, 1);
-        } else {
-          this.backdropElement.close();
-        }
       }
     },
 
@@ -15235,9 +15239,6 @@ context. You should place this element as a child of `<body>` whenever possible.
      * @protected
      */
     _renderOpened: function() {
-      if (this.withBackdrop) {
-        this.backdropElement.open();
-      }
       this._finishRenderOpened();
     },
 
@@ -15246,9 +15247,6 @@ context. You should place this element as a child of `<body>` whenever possible.
      * @protected
      */
     _renderClosed: function() {
-      if (this.withBackdrop) {
-        this.backdropElement.close();
-      }
       this._finishRenderClosed();
     },
 
